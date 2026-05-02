@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duty Portal - DKB Anchor</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0A2540">
+    <link rel="apple-touch-icon" href="https://via.placeholder.com/192x192/051424/D4AF37?text=DKB">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0A2540; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box;}
+        .login-box { background: #ffffff; color: #333; padding: 25px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 100%; max-width: 400px; text-align: center; position: relative; overflow: hidden; }
+        .login-box h2 { color: #0A2540; margin-bottom: 5px; font-size: 1.4rem; }
+        input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #E2E8F0; border-radius: 6px; font-size: 1rem; box-sizing: border-box; font-family: inherit; background-color: white; }
+        input[id="guardId"], input[id="obsGuardId"], input[id="incGuardId"] { text-align: center; text-transform: uppercase; font-size: 1.1rem; font-weight: bold; }
+        .btn { width: 100%; padding: 15px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; margin-bottom: 10px; transition: 0.3s; display: flex; justify-content: center; align-items: center; gap: 10px;}
+        .btn-in { background-color: #38A169; } .btn-in:hover { background-color: #2F855A; }
+        .btn-out { background-color: #E53E3E; } .btn-out:hover { background-color: #C53030; }
+        .btn-obs { background-color: #0A2540; } .btn-obs:hover { background-color: #051424; }
+        .btn-inc { background-color: #E53E3E; } .btn-inc:hover { background-color: #C53030; }
+        .btn-camera { background-color: #D4AF37; color: #0A2540; padding: 10px; font-size: 1rem;} .btn-camera:hover { background-color: #B8962E; }
+        .status-msg { font-weight: bold; margin-top: 10px; min-height: 24px; font-size: 0.9rem;}
+        
+        #camera-container { margin: 10px 0; background: #F4F6F8; padding: 10px; border-radius: 6px; border: 1px dashed #A0AEC0;}
+        video, #photo-preview { width: 100%; border-radius: 6px; display: none; margin-bottom: 10px; }
+
+        /* Tabs Styling */
+        .tabs { display: flex; margin-bottom: 15px; border-radius: 6px; overflow: hidden; border: 2px solid #0A2540; }
+        .tab-btn { flex: 1; padding: 8px 2px; border: none; background: #F4F6F8; color: #0A2540; font-weight: bold; font-size: 0.75rem; cursor: pointer; transition: 0.3s; display: flex; flex-direction: column; align-items: center; gap: 5px;}
+        .tab-btn i { font-size: 1.1rem; }
+        .tab-btn.active { background: #0A2540; color: #D4AF37; }
+        .form-section { display: none; animation: fadeIn 0.3s; }
+        .form-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Messages Styling */
+        .msg-list { max-height: 350px; overflow-y: auto; text-align: left; padding-right: 5px; }
+        .msg-card { background: #F4F6F8; border-left: 4px solid #D4AF37; padding: 12px; margin-bottom: 10px; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+        .msg-card:hover { background: #E2E8F0; }
+        .msg-title { font-weight: bold; color: #0A2540; font-size: 0.95rem; margin-bottom: 3px; }
+        .msg-date { font-size: 0.75rem; color: #718096; margin-bottom: 6px; }
+        .msg-snippet { font-size: 0.85rem; color: #4A5568; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* Message Reader Overlay */
+        #msg-reader { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #ffffff; z-index: 10; padding: 25px; box-sizing: border-box; text-align: left; overflow-y: auto; animation: fadeIn 0.2s; }
+        .reader-close { background: #E2E8F0; color: #0A2540; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-bottom: 15px; }
+        .reader-subject { font-size: 1.2rem; font-weight: bold; color: #0A2540; margin-bottom: 5px; }
+        .reader-meta { font-size: 0.8rem; color: #718096; border-bottom: 1px solid #E2E8F0; padding-bottom: 15px; margin-bottom: 15px; }
+        .reader-body { font-size: 0.95rem; color: #2D3748; line-height: 1.6; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <img id="portalLogo" src="https://via.placeholder.com/150x50/051424/D4AF37?text=LOGO" alt="Logo" style="max-height: 35px; margin-bottom: 10px;">
+        <h2>Duty Portal</h2>
+        
+        <div id="camera-container">
+            <video id="camera-feed" autoplay playsinline></video>
+            <img id="photo-preview" alt="Captured Photo">
+            <button id="start-camera-btn" class="btn btn-camera" onclick="startCamera()"><i class="fa-solid fa-camera"></i> Open Camera</button>
+            <button id="take-photo-btn" class="btn btn-camera" style="display:none;" onclick="takePhoto()"><i class="fa-solid fa-circle-check"></i> Capture Photo</button>
+            <input type="hidden" id="photo-data">
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-attendance" onclick="switchTab('attendance')"><i class="fa-solid fa-user-clock"></i> Time</button>
+            <button class="tab-btn" id="tab-observation" onclick="switchTab('observation')"><i class="fa-solid fa-binoculars"></i> Observe</button>
+            <button class="tab-btn" id="tab-incident" onclick="switchTab('incident')"><i class="fa-solid fa-triangle-exclamation"></i> Alert</button>
+            <button class="tab-btn" id="tab-messages" onclick="switchTab('messages')"><i class="fa-solid fa-envelope"></i> Msgs</button>
+        </div>
+
+        <div id="section-attendance" class="form-section active">
+            <p style="font-size: 0.85rem; margin-top: 0; color: #718096;">Take a photo and enter ID to log time.</p>
+            <input type="text" id="guardId" placeholder="Guard ID (e.g. DKB-001)" required>
+            <button class="btn btn-in" onclick="logAttendance('in')"><i class="fa-solid fa-right-to-bracket"></i> CLOCK IN</button>
+            <button class="btn btn-out" onclick="logAttendance('out')"><i class="fa-solid fa-right-from-bracket"></i> CLOCK OUT</button>
+            <div id="status-attendance" class="status-msg"></div>
+        </div>
+
+        <div id="section-observation" class="form-section">
+            <p style="font-size: 0.85rem; margin-top: 0; color: #718096;">Report a security observation.</p>
+            <input type="text" id="obsGuardId" placeholder="Your Guard ID" required>
+            <input type="text" id="obsSite" placeholder="Site / Location" required>
+            <textarea id="obsDesc" rows="2" placeholder="Describe the observation..." required></textarea>
+            <button class="btn btn-obs" onclick="logObservation()"><i class="fa-solid fa-paper-plane"></i> SUBMIT OBS.</button>
+            <div id="status-observation" class="status-msg"></div>
+        </div>
+
+        <div id="section-incident" class="form-section">
+            <p style="font-size: 0.85rem; margin-top: 0; color: #718096;">Log a critical incident report immediately.</p>
+            <input type="text" id="incGuardId" placeholder="Your Guard ID" required>
+            <input type="text" id="incLocation" placeholder="Site / Location" required>
+            <select id="incCategory" required>
+                <option value="" disabled selected>Select Incident Type</option>
+                <option value="Theft">Theft / Burglary</option>
+                <option value="Vandalism">Vandalism / Damage</option>
+                <option value="Intrusion">Unauthorized Intrusion</option>
+                <option value="Assault">Assault / Altercation</option>
+                <option value="Medical">Medical Emergency</option>
+                <option value="Fire">Fire Hazard</option>
+                <option value="Other">Other</option>
+            </select>
+            <textarea id="incDesc" rows="2" placeholder="Describe the incident in detail..." required></textarea>
+            <button class="btn btn-inc" onclick="logIncidentGuard()"><i class="fa-solid fa-triangle-exclamation"></i> ALERT INCIDENT</button>
+            <div id="status-incident" class="status-msg"></div>
+        </div>
+
+        <div id="section-messages" class="form-section">
+            <p style="font-size: 0.85rem; margin-top: 0; color: #718096; margin-bottom: 10px;">HQ Broadcasts and Updates.</p>
+            <div id="msg-list-container" class="msg-list">
+                <p style="color: #718096; font-size: 0.9rem;">Connecting to HQ...</p>
+            </div>
+        </div>
+
+        <div id="msg-reader">
+            <button class="reader-close" onclick="closeMessage()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+            <div class="reader-subject" id="read-subject">Subject</div>
+            <div class="reader-meta">From: HQ Admin <br>Date: <span id="read-date"></span></div>
+            <div class="reader-body" id="read-body">Body text goes here...</div>
+        </div>
+    </div>
+
+    <script>
+        // 1. FIREBASE CONFIGURATION
+        const firebaseConfig = {
+            apiKey: "AIzaSyCdg9VVGsyjLJmeiSn0tYjXn5V0GgTtOKw",
+            authDomain: "dkb-anchor-security.firebaseapp.com",
+            databaseURL: "https://dkb-anchor-security-default-rtdb.firebaseio.com",
+            projectId: "dkb-anchor-security",
+            storageBucket: "dkb-anchor-security.firebasestorage.app",
+            messagingSenderId: "619436496388",
+            appId: "1:619436496388:web:713111f954b6cd05948751"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const firestore = firebase.firestore();
+
+        // 2. FETCH SYSTEM BRANDING (Logo & Favicon)
+        function updateFavicon(url) {
+            let link = document.querySelector("link[rel~='icon']");
+            if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+            link.href = url;
+        }
+
+        function loadBranding() {
+            firestore.collection("settings").doc("system").get().then((doc) => {
+                if (doc.exists && doc.data().logo) {
+                    document.getElementById("portalLogo").src = doc.data().logo;
+                    updateFavicon(doc.data().logo);
+                }
+            }).catch(e => console.log("Branding load failed", e));
+        }
+        window.addEventListener('DOMContentLoaded', loadBranding);
+
+        // 3. TAB SWITCHING LOGIC
+        function switchTab(tabName) {
+            ['attendance', 'observation', 'incident', 'messages'].forEach(name => {
+                document.getElementById('section-' + name).classList.remove('active');
+                document.getElementById('tab-' + name).classList.remove('active');
+            });
+            document.getElementById('section-' + tabName).classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+            
+            if(tabName === 'messages') { document.getElementById('camera-container').style.display = 'none'; } 
+            else { document.getElementById('camera-container').style.display = 'block'; }
+        }
+
+        // 4. CAMERA LOGIC
+        let stream = null;
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                const video = document.getElementById('camera-feed');
+                video.srcObject = stream; video.style.display = "block";
+                document.getElementById('photo-preview').style.display = "none";
+                document.getElementById('start-camera-btn').style.display = "none";
+                document.getElementById('take-photo-btn').style.display = "flex";
+                document.getElementById('photo-data').value = ""; 
+            } catch (err) { alert("Camera access denied. Please allow camera permissions."); }
+        }
+
+        function takePhoto() {
+            const video = document.getElementById('camera-feed');
+            const canvas = document.createElement('canvas');
+            const targetWidth = 320; const scale = targetWidth / video.videoWidth;
+            canvas.width = targetWidth; canvas.height = video.videoHeight * scale;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            const photoData = canvas.toDataURL('image/jpeg', 0.6); 
+            document.getElementById('photo-data').value = photoData;
+            
+            const preview = document.getElementById('photo-preview');
+            preview.src = photoData; preview.style.display = "block";
+            
+            if(stream) stream.getTracks().forEach(track => track.stop());
+            video.style.display = "none"; document.getElementById('take-photo-btn').style.display = "none";
+            const startBtn = document.getElementById('start-camera-btn');
+            startBtn.innerHTML = '<i class="fa-solid fa-camera"></i> Retake Photo'; startBtn.style.display = "flex";
+        }
+
+        function resetFormState(statusElementId, successMessage) {
+            const statusDiv = document.getElementById(statusElementId);
+            statusDiv.style.color = "#38A169"; statusDiv.innerText = successMessage;
+            document.getElementById('photo-data').value = ''; document.getElementById('photo-preview').style.display = "none";
+            const startBtn = document.getElementById('start-camera-btn');
+            startBtn.innerHTML = '<i class="fa-solid fa-camera"></i> Open Camera'; startBtn.style.display = "flex";
+            setTimeout(() => { statusDiv.innerText = ""; }, 5000);
+        }
+
+        // 5. DATA SUBMISSIONS (Time, Obs, Inc)
+        async function logAttendance(type) {
+            const empId = document.getElementById('guardId').value.trim().toUpperCase();
+            const photoData = document.getElementById('photo-data').value;
+            const statusDiv = document.getElementById('status-attendance');
+            
+            if (!empId.startsWith("DKB-")) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Invalid ID."; return; }
+            if (!photoData) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Error: Photo required."; return; }
+
+            statusDiv.style.color = "#0A2540"; statusDiv.innerText = "Uploading...";
+            const now = new Date(); const dateStr = now.toISOString().split('T')[0]; 
+            const timeStr = now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' });
+            const recordId = `${empId}_${dateStr}`; const attendanceRef = firestore.collection("attendance").doc(recordId);
+
+            try {
+                const docSnap = await attendanceRef.get();
+                if (type === 'in') {
+                    if (docSnap.exists && docSnap.data().clockIn) { statusDiv.style.color = "#D4AF37"; statusDiv.innerText = `Already clocked in.`; } 
+                    else { await attendanceRef.set({ id: recordId, empId: empId, date: dateStr, clockIn: timeStr, photoIn: photoData, clockOut: null, timestamp: now.getTime() }, { merge: true }); document.getElementById('guardId').value = ''; resetFormState('status-attendance', `Clocked In at ${timeStr}`); }
+                } else if (type === 'out') {
+                    if (!docSnap.exists || !docSnap.data().clockIn) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Must Clock In first."; } 
+                    else if (docSnap.data().clockOut) { statusDiv.style.color = "#D4AF37"; statusDiv.innerText = `Already clocked out.`; } 
+                    else { await attendanceRef.set({ clockOut: timeStr, photoOut: photoData, timestampOut: now.getTime() }, { merge: true }); document.getElementById('guardId').value = ''; resetFormState('status-attendance', `Clocked Out at ${timeStr}`); }
+                }
+            } catch (error) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Network error."; }
+        }
+
+        async function logObservation() {
+            const empId = document.getElementById('obsGuardId').value.trim().toUpperCase(); const site = document.getElementById('obsSite').value.trim(); const desc = document.getElementById('obsDesc').value.trim(); const photoData = document.getElementById('photo-data').value; const statusDiv = document.getElementById('status-observation');
+            if (!empId || !site || !desc) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Fill all fields."; return; }
+
+            statusDiv.style.color = "#0A2540"; statusDiv.innerText = "Uploading report...";
+            const now = new Date(); const obsId = "OBS-" + now.getTime().toString().slice(-6);
+            const obsData = { id: obsId, date: now.toISOString(), site: site, observer: empId, description: desc, status: "Pending Review", timestamp: now.getTime() };
+            if (photoData) obsData.photo = photoData;
+
+            try { await firestore.collection("observations").doc(obsId).set(obsData); document.getElementById('obsGuardId').value = ''; document.getElementById('obsSite').value = ''; document.getElementById('obsDesc').value = ''; resetFormState('status-observation', "Observation submitted!"); } catch (error) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Network error."; }
+        }
+
+        async function logIncidentGuard() {
+            const empId = document.getElementById('incGuardId').value.trim().toUpperCase(); const location = document.getElementById('incLocation').value.trim(); const category = document.getElementById('incCategory').value; const desc = document.getElementById('incDesc').value.trim(); const photoData = document.getElementById('photo-data').value; const statusDiv = document.getElementById('status-incident');
+            if (!empId || !location || !category || !desc) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Fill all fields."; return; }
+
+            statusDiv.style.color = "#0A2540"; statusDiv.innerText = "Alerting Admin System...";
+            const now = new Date(); const incId = "INC-" + now.getTime().toString().slice(-6);
+            const incData = { id: incId, date: now.toISOString(), location: location, category: category, reporter: empId, description: desc, status: "Pending", timestamp: now.getTime() };
+            if (photoData) incData.photo = photoData;
+
+            try { await firestore.collection("incidents").doc(incId).set(incData); document.getElementById('incGuardId').value = ''; document.getElementById('incLocation').value = ''; document.getElementById('incCategory').value = ''; document.getElementById('incDesc').value = ''; resetFormState('status-incident', "Incident Alert Sent!"); } catch (error) { statusDiv.style.color = "#E53E3E"; statusDiv.innerText = "Network error."; }
+        }
+
+        // 6. LIVE MESSAGES LISTENER
+        let cachedMessages = {};
+        function listenForBroadcasts() {
+            firestore.collection("messages").orderBy("timestamp", "desc").onSnapshot((snapshot) => {
+                const container = document.getElementById("msg-list-container"); container.innerHTML = ""; cachedMessages = {}; let msgCount = 0;
+                snapshot.forEach((doc) => {
+                    const msg = doc.data();
+                    if (msg.recipient === "All Guards" || msg.recipient === "All Employees") {
+                        cachedMessages[msg.id] = msg; msgCount++;
+                        const date = new Date(msg.timestamp).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                        container.innerHTML += `<div class="msg-card" onclick="openMessage('${msg.id}')"><div class="msg-title">${msg.subject}</div><div class="msg-date">${date}</div><div class="msg-snippet">${msg.body}</div></div>`;
+                    }
+                });
+                if (msgCount === 0) container.innerHTML = `<p style="color: #718096; font-size: 0.9rem; text-align: center; margin-top: 20px;">No active broadcasts at this time.</p>`;
+            }, (error) => { document.getElementById("msg-list-container").innerHTML = `<p style="color: #E53E3E;">Could not load messages.</p>`; });
+        }
+
+        function openMessage(msgId) { const msg = cachedMessages[msgId]; if(!msg) return; document.getElementById('read-subject').innerText = msg.subject; document.getElementById('read-date').innerText = new Date(msg.timestamp).toLocaleString(); document.getElementById('read-body').innerText = msg.body; document.getElementById('msg-reader').style.display = 'block'; }
+        function closeMessage() { document.getElementById('msg-reader').style.display = 'none'; }
+        listenForBroadcasts();
+
+        if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js'); }); }
+    </script>
+</body>
+</html>
