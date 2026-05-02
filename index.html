@@ -684,29 +684,28 @@
         async function syncToCloud(collectionName, data) { if (!firestore) return; try { await firestore.collection(collectionName).doc(data.id).set(data); } catch (error) { console.error("Cloud Sync Failed", error); } }
         async function deleteFromCloud(collectionName, docId) { if (!firestore) return; try { await firestore.collection(collectionName).doc(docId).delete(); } catch (error) { console.error("Cloud Delete Failed", error); } }
 
-        // --- LIVE LISTENERS FROM GUARD PORTAL ---
-        function startLiveAttendanceListener() {
+        // --- LIVE LISTENERS FOR REAL-TIME CLOUD SYNC ---
+        function startRealTimeSync() {
             if (!firestore) return;
-            firestore.collection("attendance").onSnapshot((snapshot) => {
-                const tx = db.transaction("attendance", "readwrite"); const store = tx.objectStore("attendance");
-                snapshot.forEach((doc) => { store.put(doc.data()); });
-                tx.oncomplete = () => { if(document.getElementById("attendance").classList.contains("active")) renderAttendanceTable(); };
-            });
-        }
-        function startLiveObservationsListener() {
-            if (!firestore) return;
-            firestore.collection("observations").onSnapshot((snapshot) => {
-                const tx = db.transaction("observations", "readwrite"); const store = tx.objectStore("observations");
-                snapshot.forEach((doc) => { store.put(doc.data()); });
-                tx.oncomplete = () => { if(document.getElementById("observations").classList.contains("active")) renderObservationTable(); if(document.getElementById("dashboard").classList.contains("active")) renderDashboard(); };
-            });
-        }
-        function startLiveIncidentsListener() {
-            if (!firestore) return;
-            firestore.collection("incidents").onSnapshot((snapshot) => {
-                const tx = db.transaction("incidents", "readwrite"); const store = tx.objectStore("incidents");
-                snapshot.forEach((doc) => { store.put(doc.data()); });
-                tx.oncomplete = () => { if(document.getElementById("incident-reporting").classList.contains("active")) renderIncidentTable(); if(document.getElementById("dashboard").classList.contains("active")) renderDashboard(); };
+
+            const syncModules = [
+                { col: "attendance", render: () => { if(document.getElementById("attendance").classList.contains("active")) renderAttendanceTable(); } },
+                { col: "observations", render: () => { if(document.getElementById("observations").classList.contains("active")) renderObservationTable(); renderDashboard(); } },
+                { col: "incidents", render: () => { if(document.getElementById("incident-reporting").classList.contains("active")) renderIncidentTable(); renderDashboard(); } },
+                { col: "employees", render: () => { renderTable(); renderPayrollTable(); renderDeploymentTable(); renderDashboard(); } },
+                { col: "expenditures", render: () => { if(document.getElementById("expenditure").classList.contains("active")) renderExpenditureTable(); renderDashboard(); } },
+                { col: "invoices", render: () => { if(document.getElementById("invoices").classList.contains("active")) renderInvoiceTable(); } },
+                { col: "messages", render: () => { if(document.getElementById("messages").classList.contains("active")) renderMessageTable(); } },
+                { col: "users", render: () => { if(document.getElementById("settings").classList.contains("active")) renderUsersTable(); } }
+            ];
+
+            syncModules.forEach(module => {
+                firestore.collection(module.col).onSnapshot((snapshot) => {
+                    const tx = db.transaction(module.col, "readwrite"); 
+                    const store = tx.objectStore(module.col);
+                    snapshot.forEach((doc) => { store.put(doc.data()); });
+                    tx.oncomplete = module.render;
+                }, (error) => { console.warn(`Sync error on ${module.col}:`, error); });
             });
         }
 
@@ -1007,9 +1006,7 @@
 
             // BOOTSTRAP APP
             initDB().then(() => {
-                startLiveAttendanceListener(); 
-                startLiveObservationsListener(); 
-                startLiveIncidentsListener(); 
+                startRealTimeSync(); 
                 renderTable(); renderPayrollTable(); renderDeploymentTable(); renderIncidentTable(); renderObservationTable(); renderExpenditureTable(); renderAttendanceTable(); renderMessageTable(); renderAuditTable(); renderUsersTable(); renderDashboard(); renderInvoiceTable();
             });
 
@@ -1057,7 +1054,6 @@
             const forms = [document.getElementById("addEmployeeForm"), document.getElementById("incidentForm"), document.getElementById("observationForm"), document.getElementById("expenditureForm"), document.getElementById("composeMsgForm"), document.getElementById("userAccountForm"), document.getElementById("invoiceForm")];
             let editId = null, editIncId = null, editObsId = null, editExpId = null, editUserId = null;
 
-            // Updated Invoice Modal trigger to call calculate immediately
             document.getElementById("openCreateInvoiceBtn").onclick = () => { invoiceForm.reset(); invoiceItemsBody.innerHTML = ''; document.getElementById("invDate").value = new Date().toISOString().split('T')[0]; addInvoiceRow(); calculateInvoiceTotal(); createInvoiceModal.style.display = "block"; };
             document.getElementById("openAddEmployeeModal").onclick = () => modals[0].style.display = "block";
             document.getElementById("openLogIncidentBtn").onclick = () => modals[2].style.display = "block";
