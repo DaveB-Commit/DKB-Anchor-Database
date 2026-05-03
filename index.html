@@ -183,7 +183,28 @@
     </style>
 </head>
 <body>
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+     <!-- FULL SCREEN LOGIN OVERLAY -->
+    <div id="loginOverlay">
+        <div class="login-box">
+            <img src="https://via.placeholder.com/150x50/051424/D4AF37?text=LOGO" alt="DKB Anchor Logo" class="login-logo" id="loginLogoPreview">
+            <h2>System Login</h2>
+            <form id="systemLoginForm">
+                <div class="login-form-group">
+                    <label>Admin Email</label>
+                    <input type="email" id="loginEmail" required placeholder="admin@dkb.com">
+                </div>
+                <div class="login-form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="login-btn" id="loginSubmitBtn"><i class="fa-solid fa-lock"></i> Secure Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APPLICATION CONTAINER -->
+    <div class="app-container" id="mainAppContainer">
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-container">
         <!-- Sidebar Navigation -->
@@ -664,7 +685,7 @@
     <div id="printContainer"></div>
 
     <script>
-       // --- FIREBASE CONFIGURATION ---
+    // --- FIREBASE CONFIGURATION ---
     const firebaseConfig = {
       apiKey: "AIzaSyCMh0MdSzmXIl52_5z0tcgndPY54FEe9bg",
       authDomain: "dkb-anchor-security-management.firebaseapp.com",
@@ -675,14 +696,70 @@
       measurementId: "G-Z85G1VYRWB"
     };
 
-        let firestore;
-        try {
-            firebase.initializeApp(firebaseConfig); firestore = firebase.firestore();
-            console.log("Firebase connected successfully to DKB Anchor Security!");
-        } catch (e) { console.warn("Firebase config missing or invalid.", e); }
+    let firestore, auth, currentUserData = null;
+    
+    // GLOBAL STATE CACHE
+    window.appData = { employees: [], incidents: [], observations: [], expenditures: [], attendance: [], invoices: [], messages: [], users: [], audit: [] };
 
-        async function syncToCloud(collectionName, data) { if (!firestore) return; try { await firestore.collection(collectionName).doc(data.id).set(data); } catch (error) { console.error("Cloud Sync Failed", error); } }
-        async function deleteFromCloud(collectionName, docId) { if (!firestore) return; try { await firestore.collection(collectionName).doc(docId).delete(); } catch (error) { console.error("Cloud Delete Failed", error); } }
+    try {
+        firebase.initializeApp(firebaseConfig); 
+        firestore = firebase.firestore();
+        auth = firebase.auth();
+        
+        firestore.enablePersistence({ synchronizeTabs: true }).catch((err) => { 
+            if (err.code == 'failed-precondition') console.warn("Multiple tabs open, persistence enabled in first tab only.");
+            else if (err.code == 'unimplemented') console.warn("Browser lacks persistence support.");
+        });
+        console.log("Firebase connected!");
+    } catch (e) { 
+        console.warn("Firebase config error.", e); 
+    }
+
+    // --- AUTHENTICATION LISTENER ---
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('mainAppContainer').style.display = 'flex';
+            document.getElementById('currentUserDisplay').innerText = user.email;
+            initializeSystem(user);
+        } else {
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('mainAppContainer').style.display = 'none';
+            document.getElementById('loginSubmitBtn').disabled = false;
+            document.getElementById('loginSubmitBtn').innerHTML = '<i class="fa-solid fa-lock"></i> Secure Sign In';
+            
+            // Try to load settings, fail silently if unable
+            try {
+                getSetting("system").then(data => {
+                    if(data) {
+                        document.getElementById("loginLogoPreview").src = data.logo;
+                        if(data.theme === "dark") document.body.classList.add("dark-theme");
+                    }
+                });
+            } catch(e) {}
+        }
+    });
+
+    document.getElementById("systemLoginForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const email = document.getElementById("loginEmail").value;
+        const pass = document.getElementById("loginPassword").value;
+        const btn = document.getElementById("loginSubmitBtn");
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
+        auth.signInWithEmailAndPassword(email, pass).catch(error => {
+            alert("Login Failed: " + error.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-lock"></i> Secure Sign In';
+        });
+    });
+
+    document.getElementById("headerLogoutBtn").addEventListener("click", () => {
+        if(confirm("Are you sure you want to sign out?")) {
+            logAction("Authentication", `User signed out: ${auth.currentUser?.email}`);
+            auth.signOut();
+        }
+    });
 
         // --- LIVE LISTENERS FOR REAL-TIME CLOUD SYNC ---
         function startRealTimeSync() {
